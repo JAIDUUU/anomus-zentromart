@@ -25,7 +25,7 @@ sys.path.insert(0, str(DATASET_DIR))
 from src.retrieval import load_chunks, BM25Index, expand_query
 from src.agent import SupportAgent, add_business_days, detect_language, TODAY, HOLIDAYS
 from src.voice import normalize_for_speech
-from tools import lookup_order, create_ticket
+from tools import lookup_order, create_ticket  # type: ignore
 
 class TestOfflineVoiceOps(unittest.TestCase):
     @classmethod

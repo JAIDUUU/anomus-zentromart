@@ -1,0 +1,8 @@
+{
+  "python.analysis.extraPaths": [
+    "./Capstone_Project_Dataset_FTTT_2026"
+  ],
+  "python.autoComplete.extraPaths": [
+    "./Capstone_Project_Dataset_FTTT_2026"
+  ]
+}

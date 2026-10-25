@@ -17,9 +17,9 @@ from .retrieval import load_chunks, BM25Index
 # Ensure dataset root is on sys.path for offline mock tools
 sys.path.insert(0, str(DATASET_DIR))
 try:
-    from tools import lookup_order, create_ticket
+    from tools import lookup_order, create_ticket  # type: ignore
 except ImportError:
-    from tools.tools import lookup_order, create_ticket
+    from tools.tools import lookup_order, create_ticket  # type: ignore
 
 TODAY = date(2026, 10, 20)
 HOLIDAYS = {'2026-08-15', '2026-10-02', '2026-10-19', '2026-11-09'}
