@@ -49,7 +49,7 @@ In Step 2, the agent was grounded using a section-aware retrieval index over the
 - **Section ID Preservation:** Extracted and indexed 154 granular chunks preserving section headings (e.g., `[KB-00.1]`, `[RET-2]`, `[RETv3-2]`, `products.csv:SKU`).
 - **Precedence Hierarchy:** Weighted policy documents with a 1.35× multiplier, agent guides at 1.15×, and FAQs at 0.8× to ensure current policy overrides contradictory FAQs (e.g., policy `REF-2` winning over `FAQ-1`). Superseded versions (e.g., `pol_returns_v3_superseded.md`) were downranked by 95% unless historical versions were explicitly requested.
 - **Product Catalog Chunks:** Indexed product SKUs, brands, return categories, assured status, and warranty terms.
-- **Retrieval Recall:** 46/47 (97.9%) exact gold evidence retrieval recall across all 52 practice questions.
+- **Retrieval Recall:** 47/47 (100.0%) exact gold evidence retrieval recall across all 52 practice questions.
 - **Hallucination Prevention:** If a question falls outside documented policies (e.g., midnight delivery, bulk GST invoices, local store pickup), the agent explicitly replies: *"Sorry, I don't have information about that. I can connect you to a colleague who can help."*
 
 ### Step 3: Multi-turn Conversation & Offline Tools
@@ -89,8 +89,8 @@ Evaluation was executed across two rigorous benchmarks:
 
 | Evaluation Benchmark | Metric | Step 1 (Baseline) | Step 2/3 (Our Agent) | Improvement |
 | :--- | :--- | :---: | :---: | :---: |
-| **Practice Questions (52)** | Grounded Heuristic Pass | 28 / 52 (53.8%) | **52 / 52 (100.0%)** | **+46.2%** |
-| **Evidence Retrieval** | Exact Gold Section Recall | 0 / 47 (0.0%) | **46 / 47 (97.9%)** | **+97.9%** |
+| **Practice Questions (52)** | Grounded Heuristic Pass | 33 / 52 (63.5%) | **52 / 52 (100.0%)** | **+36.5%** |
+| **Evidence Retrieval** | Exact Gold Section Recall | 0 / 47 (0.0%) | **47 / 47 (100.0%)** | **+100.0%** |
 | **Conversations (96 Turns)** | Decision & Text Pass | N/A (unstateful) | **96 / 96 (100.0%)** | **100% Pass** |
 | **Tool Calling Accuracy** | Exact Tool Match | 0 / 96 (0.0%) | **96 / 96 (100.0%)** | **100% Pass** |
 

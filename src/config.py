@@ -2,8 +2,9 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
 ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(ROOT / '.env')
+load_dotenv()
 raw_dataset_dir = os.getenv("DATASET_DIR", "Capstone_Project_Dataset_FTTT_2026")
 DATASET_DIR = Path(raw_dataset_dir).expanduser()
 if not DATASET_DIR.is_absolute():
