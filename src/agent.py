@@ -106,7 +106,16 @@ class SupportAgent:
         # 1. Turn 1 Greeting / AI Assistant Identification Check
         is_first_turn = len(history) == 0
         order_match = re.search(r'(?<!\d)(\d{4}[ -]?\d{4})(?!\d)', message)
-        verify_match = re.search(r'(?<!\d)(\d{4}|\d{6})(?!\d)', message)
+        
+        # Strip order ID before checking for 4-digit/6-digit verification code to avoid matching order digits
+        msg_without_oid = message
+        clean_oid = None
+        if order_match:
+            clean_oid = ''.join(ch for ch in order_match.group(1) if ch.isdigit())
+            msg_without_oid = message[:order_match.start()] + ' ' + message[order_match.end():]
+
+        verify_match = re.search(r'(?<!\d)(\d{4}|\d{6})(?!\d)', msg_without_oid)
+
         is_verification_prompt = bool(
             history and history[-1]['role'] == 'assistant' and
             ('verify' in history[-1]['content'].lower() or
@@ -144,26 +153,29 @@ class SupportAgent:
             return {'answer': answer, 'sources': [{'section_id': 'STY-1', 'source': 'agent_conversation_style.md', 'score': 1.0}], 'tool_calls': [], 'handover': False, 'decision': decision}
 
         # Case 2: Order number provided
-        if order_match and not (is_verification_prompt and verify_match and len(verify_match.group(1)) in (4, 6)):
-            clean_oid = ''.join(ch for ch in order_match.group(1) if ch.isdigit())
+        if clean_oid:
             state['order_id'] = clean_oid
-            # Call lookup_order without verification
-            res = lookup_order(clean_oid)
-            calls.append(f'lookup_order(order_id={clean_oid})')
-            decision = 'clarify'
-            ai_prefix = "Hello! I am ZentroMart's AI support assistant. " if is_first_turn else ""
-            if lang == 'hi':
-                ai_prefix_hi = "नमस्ते! मैं ZentroMart का एआई (AI) असिस्टेंट हूँ। " if is_first_turn else ""
-                answer = f"{ai_prefix_hi}ऑर्डर के विवरण की पुष्टि के लिए कृपया अपने पंजीकृत फ़ोन के आख़िरी 4 अंक या 6 अंकों का डिलीवरी पिनकोड साझा करें।"
-            elif lang == 'hi-en':
-                ai_prefix_hien = "Hello! Main ZentroMart ka AI support assistant hoon. " if is_first_turn else ""
-                answer = f"{ai_prefix_hien}Aapke order ko verify karne ke liye, kripya apne registered phone ke last 4 digits ya delivery pincode share kijiye."
+            # If verification proof is also provided in the same message, proceed to verify immediately
+            if verify_match and len(verify_match.group(1)) in (4, 6):
+                is_verification_prompt = True
             else:
-                answer = f"{ai_prefix}To help you with order {clean_oid}, please provide the last 4 digits of your registered phone number or your 6-digit delivery pincode."
+                # Call lookup_order without verification
+                res = lookup_order(clean_oid)
+                calls.append(f'lookup_order(order_id={clean_oid})')
+                decision = 'clarify'
+                ai_prefix = "Hello! I am ZentroMart's AI support assistant. " if is_first_turn else ""
+                if lang == 'hi':
+                    ai_prefix_hi = "नमस्ते! मैं ZentroMart का एआई (AI) असिस्टेंट हूँ। " if is_first_turn else ""
+                    answer = f"{ai_prefix_hi}ऑर्डर के विवरण की पुष्टि के लिए कृपया अपने पंजीकृत फ़ोन के आख़िरी 4 अंक या 6 अंकों का डिलीवरी पिनकोड साझा करें।"
+                elif lang == 'hi-en':
+                    ai_prefix_hien = "Hello! Main ZentroMart ka AI support assistant hoon. " if is_first_turn else ""
+                    answer = f"{ai_prefix_hien}Aapke order ko verify karne ke liye, kripya apne registered phone ke last 4 digits ya delivery pincode share kijiye."
+                else:
+                    answer = f"{ai_prefix}To help you with order {clean_oid}, please provide the last 4 digits of your registered phone number or your 6-digit delivery pincode."
 
-            history.append({'role': 'user', 'content': message})
-            history.append({'role': 'assistant', 'content': answer})
-            return {'answer': answer, 'sources': [{'section_id': 'IDV-2', 'source': 'agent_identity_verification.md', 'score': 1.0}], 'tool_calls': calls, 'handover': False, 'decision': decision}
+                history.append({'role': 'user', 'content': message})
+                history.append({'role': 'assistant', 'content': answer})
+                return {'answer': answer, 'sources': [{'section_id': 'IDV-2', 'source': 'agent_identity_verification.md', 'score': 1.0}], 'tool_calls': calls, 'handover': False, 'decision': decision}
 
         # Case 3: Caller provides verification proof (4 or 6 digits)
         if is_verification_prompt and verify_match:
@@ -258,14 +270,23 @@ class SupportAgent:
             reason = 'repeat_contact' if is_repeat else 'customer_requested'
             summary = f"Customer escalation ({reason}). Order ID: {oid or 'None'}. Previous contacts or direct request. Handing over to human support team."
             ticket = create_ticket(summary, order_id=oid, reason=reason, intent='support')
-            calls.append('create_ticket()')
-            tid = ticket.get('ticket_id', 'TKT-PENDING')
-            if lang == 'hi':
-                answer = f"मैंने आपकी समस्या को सुलझाने के लिए एक सपोर्ट टिकट ({tid}) बना दिया है। हमारे सहयोगी (human colleague) जल्द आपसे संपर्क करेंगे।"
-            elif lang == 'hi-en':
-                answer = f"Maine is issue ke liye support ticket ({tid}) create kar diya hai. Hamare human colleague aapko jaldi contact karenge."
+            if ticket.get('created'):
+                calls.append('create_ticket()')
+                tid = ticket.get('ticket_id', '')
+                if lang == 'hi':
+                    answer = f"मैंने आपकी समस्या को सुलझाने के लिए एक सपोर्ट टिकट ({tid}) बना दिया है। हमारे सहयोगी (human colleague) जल्द आपसे संपर्क करेंगे।"
+                elif lang == 'hi-en':
+                    answer = f"Maine is issue ke liye support ticket ({tid}) create kar diya hai. Hamare human colleague aapko jaldi contact karenge."
+                else:
+                    answer = f"I see you need specialized assistance. I have created a support ticket ({tid}) to connect you with a human colleague who will assist you shortly."
             else:
-                answer = f"I see you need specialized assistance. I have created a support ticket ({tid}) to connect you with a human colleague who will assist you shortly."
+                calls.append('create_ticket:failed')
+                if lang == 'hi':
+                    answer = "मैंने आपके अनुरोध को हमारे सहयोगी (human colleague) को समीक्षा के लिए अग्रेषित कर दिया है।"
+                elif lang == 'hi-en':
+                    answer = "Maine aapka request hamare human colleague ko review ke liye forward kar diya hai."
+                else:
+                    answer = "I have flagged your request for a human colleague to review directly."
 
             history.append({'role': 'user', 'content': message})
             history.append({'role': 'assistant', 'content': answer})
@@ -285,14 +306,18 @@ class SupportAgent:
                 decision = 'escalate'
                 summary = f"High-value damaged item claim for order {state['order_id']} exceeding INR 10,000. Customer requested replacement approval. Escalated to Priority Resolution team."
                 ticket = create_ticket(summary, order_id=state['order_id'], reason='high_value_damage', intent='replacement')
-                calls.append('create_ticket()')
-                tid = ticket.get('ticket_id', 'TKT-PENDING')
-                if lang == 'hi':
-                    answer = f"₹10,000 से अधिक के डैमेज क्लेम को केवल हमारी Priority Resolution टीम अप्रूव कर सकती है। मैंने आपकी समस्या के लिए टिकट ({tid}) बना दिया है और हमारे सहयोगी आपसे संपर्क करेंगे।"
-                elif lang == 'hi-en':
-                    answer = f"₹10,000 se upar ke damage replacement claims ko Priority Resolution team review karti hai. Maine support ticket ({tid}) create kar diya hai aur hamari team aapse sampark karegi."
+                if ticket.get('created'):
+                    calls.append('create_ticket()')
+                    tid = ticket.get('ticket_id', '')
+                    if lang == 'hi':
+                        answer = f"₹10,000 से अधिक के डैमेज क्लेम को केवल हमारी Priority Resolution टीम अप्रूव कर सकती है। मैंने आपकी समस्या के लिए टिकट ({tid}) बना दिया है और हमारे सहयोगी आपसे संपर्क करेंगे।"
+                    elif lang == 'hi-en':
+                        answer = f"₹10,000 se upar ke damage replacement claims ko Priority Resolution team review karti hai. Maine support ticket ({tid}) create kar diya hai aur hamari team aapse sampark karegi."
+                    else:
+                        answer = f"Damage claims exceeding ₹10,000 must be reviewed by our Priority Resolution team. I have created a support ticket ({tid}) for a colleague to handle your request."
                 else:
-                    answer = f"Damage claims exceeding ₹10,000 must be reviewed by our Priority Resolution team. I have created a support ticket ({tid}) for a colleague to handle your request."
+                    calls.append('create_ticket:failed')
+                    answer = "Damage claims exceeding ₹10,000 must be reviewed by our Priority Resolution team. A human colleague will contact you shortly."
                 history.append({'role': 'user', 'content': message})
                 history.append({'role': 'assistant', 'content': answer})
                 return {'answer': answer, 'sources': [{'section_id': 'DWM-3', 'source': 'pol_damaged_wrong_missing.md', 'score': 1.0}, {'section_id': 'ESC-1', 'source': 'agent_escalation_handoff.md', 'score': 1.0}], 'tool_calls': calls, 'handover': True, 'decision': decision}
@@ -323,8 +348,8 @@ class SupportAgent:
                 history.append({'role': 'assistant', 'content': answer})
                 return {'answer': answer, 'sources': [{'section_id': 'CAN-2', 'source': 'pol_cancellations.md', 'score': 1.0}], 'tool_calls': calls, 'handover': False, 'decision': decision}
 
-            # 5d. Cancel order before shipping
-            if re.search(r'\b(cancel|stop|roko|रद्द|कैंसिल)\b', message, re.I) and order_status in ('confirmed', 'processing', 'unshipped'):
+            # 5d. Cancel order before shipping (placed, packed, confirmed, processing)
+            if re.search(r'\b(cancel|stop|roko|रद्द|कैंसिल)\b', message, re.I) and order_status not in ('shipped', 'in_transit', 'out_for_delivery', 'delivered'):
                 decision = 'answer'
                 if lang == 'hi':
                     answer = "आपका ऑर्डर अभी शिप नहीं हुआ है। आप ZentroMart ऐप में 'My Orders' सेक्शन में जाकर इसे मुफ़्त में कैंसिल कर सकते हैं।"
@@ -409,14 +434,23 @@ class SupportAgent:
                     decision = 'escalate'
                     summary = f"Customer inquiry regarding delayed refund for order {state['order_id']}. Reference number RRN: {rrn}. Overdue beyond standard window. Handing over to colleague."
                     ticket = create_ticket(summary, order_id=state['order_id'], reason='refund_delayed', intent='refund')
-                    calls.append('create_ticket()')
-                    tid = ticket.get('ticket_id', 'TKT-PENDING')
-                    if lang == 'hi':
-                        answer = f"आपके रिफ़ंड का बैंक संदर्भ संख्या (RRN) {rrn} है। रिफ़ंड में देरी की समीक्षा के लिए मैंने एक सपोर्ट टिकट ({tid}) बना दिया है और हमारी टीम (colleague) आपसे संपर्क करेगी।"
-                    elif lang == 'hi-en':
-                        answer = f"Aapke refund ka bank reference number (RRN) {rrn} hai. Isme ho rahi deri ke liye maine support ticket ({tid}) create kar diya hai aur colleague aapse sampark karenge."
+                    if ticket.get('created'):
+                        calls.append('create_ticket()')
+                        tid = ticket.get('ticket_id', 'TKT-PENDING')
+                        if lang == 'hi':
+                            answer = f"आपके रिफ़ंड का बैंक संदर्भ संख्या (RRN) {rrn} है। रिफ़ंड में देरी की समीक्षा के लिए मैंने एक सपोर्ट टिकट ({tid}) बना दिया है और हमारी टीम (colleague) आपसे संपर्क करेगी।"
+                        elif lang == 'hi-en':
+                            answer = f"Aapke refund ka bank reference number (RRN) {rrn} hai. Isme ho rahi deri ke liye maine support ticket ({tid}) create kar diya hai aur colleague aapse sampark karenge."
+                        else:
+                            answer = f"Your refund reference number (RRN) is {rrn}. Since it is delayed, I have raised a support ticket ({tid}) for our team to resolve this with the bank."
                     else:
-                        answer = f"Your refund reference number (RRN) is {rrn}. Since it is delayed, I have raised a support ticket ({tid}) for our team to resolve this with the bank."
+                        calls.append('create_ticket:failed')
+                        if lang == 'hi':
+                            answer = f"आपके रिफ़ंड का बैंक संदर्भ संख्या (RRN) {rrn} है। रिफ़ंड में देरी की समीक्षा के लिए हमारे सहयोगी (colleague) आपसे जल्द ही संपर्क करेंगे।"
+                        elif lang == 'hi-en':
+                            answer = f"Aapke refund ka bank reference number (RRN) {rrn} hai. Hamare colleague is delay ko check karke aapse jaldi sampark karenge."
+                        else:
+                            answer = f"Your refund reference number (RRN) is {rrn}. A human colleague will contact you shortly regarding the delay."
                     history.append({'role': 'user', 'content': message})
                     history.append({'role': 'assistant', 'content': answer})
                     return {'answer': answer, 'sources': [{'section_id': 'REF-6', 'source': 'pol_refunds.md', 'score': 1.0}, {'section_id': 'ESC-1', 'source': 'agent_escalation_handoff.md', 'score': 1.0}], 'tool_calls': calls, 'handover': True, 'decision': decision}
@@ -521,6 +555,19 @@ class SupportAgent:
                 f"- Credit/debit card (7 b-days): {d7.strftime('%Y-%m-%d')} ({d7.strftime('%d %B %Y')})\n"
             )
 
+        verified_order_fact = ""
+        if state.get('verified') and state.get('order_data'):
+            od = state['order_data']
+            verified_order_fact = (
+                f"\nVerified Order Context for Order ID {state['order_id']}:\n"
+                f"- Status: {od.get('order_status')}\n"
+                f"- Total: ₹{od.get('order_total')}\n"
+                f"- Payment Method: {od.get('payment_method')}\n"
+            )
+            if od.get('items'):
+                item_names = [it.get('name', '') for it in od['items']]
+                verified_order_fact += f"- Items: {', '.join(item_names)}\n"
+
         context_texts = []
         for c in retrieved[:3]:
             context_texts.append(f"[{c['section_id']}] {c['text'][:350]}")
@@ -529,7 +576,8 @@ class SupportAgent:
         prompt_system = (
             SYSTEM_PROMPT +
             f"\n\nRetrieved Knowledge & Policies:\n{context_block}\n" +
-            timeline_fact
+            timeline_fact +
+            verified_order_fact
         )
 
         messages = [{'role': 'system', 'content': prompt_system}]
