@@ -1,0 +1,3 @@
+groq>=0.13.0
+python-dotenv>=1.0.1
+gnani-vachana>=0.7.7
