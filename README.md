@@ -68,9 +68,3 @@ Each input produces a `.json` file containing the transcript, answer, retrieved 
 - The included evaluator reports a lexical heuristic score, not an official capstone score.
 - Voice mode is fully operational with live Gnani.ai STT (`en-IN` / `hi-IN`) and TTS (`timbre-v2.5` Kaveri voice).
 
-## Submission files
-
-Include your public repository URL in the submission package after publishing it:
-`https://github.com/JAIDUUU/anomus-zentromart`
-
-Also include `.env.example`, `requirements.txt`, a run command, a report (maximum 4 pages), a demo video (maximum 2 minutes), and sample outputs. Do not include API keys, virtual environments, or a duplicate dataset copy.
